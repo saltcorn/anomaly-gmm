@@ -1,0 +1,28 @@
+{
+  "name": "@saltcorn/anomaly-gmm",
+  "version": "0.1.0",
+  "description": "Anomaly prediction with Gaussian Mixture Models for Saltcorn",
+  "main": "index.js",
+  "dependencies": {
+    "@saltcorn/markup": "^0.8.4",
+    "@saltcorn/data": "^0.8.4"
+  },
+  "author": "Tom Nielsen",
+  "license": "MIT",
+  "eslintConfig": {
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 2020
+    },
+    "env": {
+      "node": true,
+      "es6": true
+    },
+    "rules": {
+      "no-unused-vars": "off",
+      "no-case-declarations": "off",
+      "no-empty": "warn",
+      "no-fallthrough": "warn"
+    }
+  }
+}
