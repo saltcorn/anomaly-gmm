@@ -57,6 +57,17 @@ const configuration_workflow = (req) =>
     ],
   });
 
+const train_script = ({ data_file, model_file, n_components }) => `
+import pickle
+import pandas as pd
+from sklearn.mixture import GaussianMixture
+
+df = pd.read_csv('${data_file}')
+gm = GaussianMixture(n_components=${n_components}, random_state=0).fit(df)
+with open('${model_file}', 'wb') as handle:
+    pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+`;
+
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: "anomaly-gmm",
