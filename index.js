@@ -73,11 +73,21 @@ module.exports = {
         },
       ],
 
-      train: async ({ table, configuration, hyperparameters }) => {
+      train: async ({ table, configuration, hyperparameters, state }) => {
         return { blob: 1, report: "", metric_values: {} };
       },
-      predict: async ({ table, configuration, hyperparameters, blob, row }) => {
-        return { anomaly: 5 };
+      predict: async ({
+        table,
+        configuration,
+        hyperparameters,
+        blob,
+        rows,
+      }) => {
+        const result = {};
+        rows.forEach((row) => {
+          result[row.id] = { anomaly: 5 };
+        });
+        return result;
       },
     },
   },
