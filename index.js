@@ -12,6 +12,12 @@ const {
   readState,
 } = require("@saltcorn/data/plugin-helper");
 
+const pythonBridge = require("python-bridge");
+
+let python = pythonBridge({
+  python: "python3",
+});
+
 const configuration_workflow = (req) =>
   new Workflow({
     steps: [
@@ -84,7 +90,25 @@ module.exports = {
         },
       ],
 
-      train: async ({ table, configuration, hyperparameters, state }) => {
+      train: async ({
+        table,
+        configuration: { columns },
+        hyperparameters,
+        state,
+      }) => {
+        const fields = table.fields;
+
+        readState(state, fields);
+        const { joinFields, aggregations } = picked_fields_to_query(
+          columns,
+          fields
+        );
+        const where = await stateFieldsToWhere({ fields, state, table });
+        let rows = await table.getJoinedRows({
+          where,
+          joinFields,
+          aggregations,
+        });
         return { blob: 1, report: "", metric_values: {} };
       },
       predict: async ({
