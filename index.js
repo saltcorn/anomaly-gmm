@@ -3,7 +3,9 @@ const Table = require("@saltcorn/data/models/table");
 const Form = require("@saltcorn/data/models/form");
 const Workflow = require("@saltcorn/data/models/workflow");
 const FieldRepeat = require("@saltcorn/data/models/fieldrepeat");
-
+const { eval_expression } = require("@saltcorn/data/models/expression");
+const fs = require("fs");
+const fsp = fs.promises;
 const {
   field_picker_fields,
   picked_fields_to_query,
@@ -109,7 +111,61 @@ module.exports = {
           joinFields,
           aggregations,
         });
-        return { blob: 1, report: "", metric_values: {} };
+
+        const colWriters = [];
+        /*let idSupply = 0;
+        const getId = () => {
+          idSupply++;
+          return idSupply;
+        };*/
+        columns.forEach((column) => {
+          switch (column.type) {
+            case "FormulaValue":
+              colWriters.push({
+                header: column.header_label,
+                write: (row) => eval_expression(column.formula, row),
+              });
+              break;
+            case "Field":
+              let f = fields.find((fld) => fld.name === column.field_name);
+              if (f.type.name === "FloatArray") {
+                const dims = rows.map((r) => r[column.field_name].length);
+                const maxDims = Math.max(...dims);
+                for (let i = i < maxDims; i++; ) {
+                  colWriters.push({
+                    header: column.field_name + i,
+                    write: (row) => row[column.field_name][i],
+                  });
+                }
+              } else {
+                colWriters.push({
+                  header: column.field_name,
+                  write: (row) => row[column.field_name],
+                });
+              }
+              break;
+
+            default:
+              break;
+          }
+        });
+        const outstream = fs.createWriteStream("/tmp/scdata.csv");
+        outstream.write(colWriters.map((cw) => cw.header).join(",") + "\n");
+        rows.forEach((row) => {
+          outstream.write(
+            colWriters.map((cw) => cw.write(row)).join(",") + "\n"
+          );
+        });
+        outstream.end();
+        await python.ex(
+          train_script({
+            data_file: "/tmp/scdata.csv",
+            model_file: "/tmp/scanomallymodel",
+            n_components: hyperparameters.clusters,
+          })
+        );
+        const blob = await fsp.readFile("/tmp/scanomallymodel");
+        return { blob, report: "", metric_values: {} };
       },
       predict: async ({
         table,
