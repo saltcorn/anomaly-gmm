@@ -24,7 +24,7 @@ const configuration_workflow = (req) =>
   new Workflow({
     steps: [
       {
-        name: "Columns",
+        name: "Predictors",
         form: async (context) => {
           const table = await Table.findOne(
             context.table_id
@@ -65,16 +65,58 @@ const configuration_workflow = (req) =>
     ],
   });
 
-const train_script = ({ data_file, model_file, n_components }) => `
-import pickle
-import pandas as pd
-from sklearn.mixture import GaussianMixture
+const write_csv = async (rows, columns, fields, filename) => {
+  return new Promise((resolve, reject) => {
+    const colWriters = [];
+    /*let idSupply = 0;
+  const getId = () => {
+    idSupply++;
+    return idSupply;
+  };*/
+    columns.forEach((column) => {
+      switch (column.type) {
+        case "FormulaValue":
+          colWriters.push({
+            header: column.header_label,
+            write: (row) => eval_expression(column.formula, row),
+          });
+          break;
+        case "Field":
+          let f = fields.find((fld) => fld.name === column.field_name);
+          if (f.type.name === "FloatArray") {
+            const dims = rows.map((r) => r[column.field_name].length);
+            const maxDims = Math.max(...dims);
+            for (let i = i < maxDims; i++; ) {
+              colWriters.push({
+                header: column.field_name + i,
+                write: (row) => row[column.field_name][i],
+              });
+            }
+          } else {
+            colWriters.push({
+              header: column.field_name,
+              write: (row) => row[column.field_name],
+            });
+          }
+          break;
 
-df = pd.read_csv('${data_file}')
-gm = GaussianMixture(n_components=${n_components}, random_state=0).fit(df)
-with open('${model_file}', 'wb') as handle:
-    pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
-`;
+        default:
+          break;
+      }
+    });
+    const outstream = fs.createWriteStream(filename);
+    outstream.write(colWriters.map((cw) => cw.header).join(",") + "\n");
+    rows.forEach((row) => {
+      outstream.write(colWriters.map((cw) => cw.write(row)).join(",") + "\n");
+    });
+    outstream.end();
+    //https://stackoverflow.com/a/39880990/19839414
+    outstream.on("finish", () => {
+      resolve();
+    });
+    outstream.on("error", reject);
+  });
+};
 
 module.exports = {
   sc_plugin_api_version: 1,
@@ -112,73 +154,42 @@ module.exports = {
           aggregations,
         });
 
-        const colWriters = [];
-        /*let idSupply = 0;
-        const getId = () => {
-          idSupply++;
-          return idSupply;
-        };*/
-        columns.forEach((column) => {
-          switch (column.type) {
-            case "FormulaValue":
-              colWriters.push({
-                header: column.header_label,
-                write: (row) => eval_expression(column.formula, row),
-              });
-              break;
-            case "Field":
-              let f = fields.find((fld) => fld.name === column.field_name);
-              if (f.type.name === "FloatArray") {
-                const dims = rows.map((r) => r[column.field_name].length);
-                const maxDims = Math.max(...dims);
-                for (let i = i < maxDims; i++; ) {
-                  colWriters.push({
-                    header: column.field_name + i,
-                    write: (row) => row[column.field_name][i],
-                  });
-                }
-              } else {
-                colWriters.push({
-                  header: column.field_name,
-                  write: (row) => row[column.field_name],
-                });
-              }
-              break;
+        await write_csv(rows, columns, fields, "/tmp/scdata.csv");
 
-            default:
-              break;
-          }
-        });
-        const outstream = fs.createWriteStream("/tmp/scdata.csv");
-        outstream.write(colWriters.map((cw) => cw.header).join(",") + "\n");
-        rows.forEach((row) => {
-          outstream.write(
-            colWriters.map((cw) => cw.write(row)).join(",") + "\n"
-          );
-        });
-        outstream.end();
-        await python.ex(
-          train_script({
-            data_file: "/tmp/scdata.csv",
-            model_file: "/tmp/scanomallymodel",
-            n_components: hyperparameters.clusters,
-          })
-        );
+        await python.ex`
+        import pickle
+        import pandas
+        from sklearn.mixture import GaussianMixture
+        
+        df = pandas.read_csv('/tmp/scdata.csv')
+        gm = GaussianMixture(n_components=${hyperparameters.clusters}, random_state=0).fit(df)
+        with open('/tmp/scanomallymodel', 'wb') as handle:
+            pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        `;
         const blob = await fsp.readFile("/tmp/scanomallymodel");
-        return { blob, report: "", metric_values: {} };
+        return { fit_object: blob, report: "", metric_values: {} };
       },
       predict: async ({
-        table,
-        configuration,
+        id, //instance id
+        model: {
+          configuration: { columns },
+          table_id,
+        },
         hyperparameters,
-        blob,
+        fit_object,
         rows,
       }) => {
-        const result = {};
-        rows.forEach((row) => {
-          result[row.id] = { anomaly: 5 };
-        });
-        return result;
+        await fsp.writeFile("/tmp/scanomallymodel" + id, fit_object);
+        const table = Table.findOne({ id: table_id });
+        await write_csv(rows, columns, table.fields, "/tmp/scdata.csv");
+        await python.ex`
+        import pickle
+        import pandas
+        with open('/tmp/scanomallymodel'+str(${id}), "rb") as input_file:
+           gm1 = pickle.load(input_file)`;
+        const probas =
+          await python`list(gm1.score_samples(pandas.read_csv('/tmp/scdata.csv')))`;
+        return probas.map((proba) => ({ anomaly: proba }));
       },
     },
   },
