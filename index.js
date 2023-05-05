@@ -121,7 +121,6 @@ const write_csv = async (rows, columns, fields, filename) => {
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: "anomaly-gmm",
-  metrics: {},
   modeltemplates: {
     anomaly_gmm: {
       configuration_workflow,
@@ -133,7 +132,11 @@ module.exports = {
           attributes: { min: 0 },
         },
       ],
-
+      metrics: { AIC: { lowerIsBetter: true }, BIC: { lowerIsBetter: true } },
+      prediction_output: [
+        { name: "log_likelihood", type: "Float" },
+        { name: "Cluster", type: "Integer" },
+      ],
       train: async ({
         table,
         configuration: { columns },
@@ -160,14 +163,23 @@ module.exports = {
         import pickle
         import pandas
         from sklearn.mixture import GaussianMixture
-        
-        df = pandas.read_csv('/tmp/scdata.csv')
-        gm = GaussianMixture(n_components=${hyperparameters.clusters}, random_state=0).fit(df)
-        with open('/tmp/scanomallymodel', 'wb') as handle:
-            pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        def train_model():
+          df = pandas.read_csv('/tmp/scdata.csv')
+          gm = GaussianMixture(n_components=${hyperparameters.clusters}, random_state=0).fit(df)
+          with open('/tmp/scanomallymodel', 'wb') as handle:
+              pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+          return {
+            'aic': gm.aic(df),
+            'bic': gm.bic(df)
+          }
         `;
+        const trainres = await python`train_model()`;
         const blob = await fsp.readFile("/tmp/scanomallymodel");
-        return { fit_object: blob, report: "", metric_values: {} };
+        return {
+          fit_object: blob,
+          report: "",
+          metric_values: { AIC: trainres.aic, BIC: trainres.bic },
+        };
       },
       predict: async ({
         id, //instance id
@@ -181,15 +193,26 @@ module.exports = {
       }) => {
         await fsp.writeFile("/tmp/scanomallymodel" + id, fit_object);
         const table = Table.findOne({ id: table_id });
-        await write_csv(rows, columns, table.fields, "/tmp/scdata.csv");
+        const rnd = Math.round(Math.random() * 10000);
+        await write_csv(rows, columns, table.fields, `/tmp/scdata${rnd}.csv`);
         await python.ex`
         import pickle
         import pandas
-        with open('/tmp/scanomallymodel'+str(${id}), "rb") as input_file:
-           gm1 = pickle.load(input_file)`;
-        const probas =
-          await python`list(gm1.score_samples(pandas.read_csv('/tmp/scdata.csv')))`;
-        return probas.map((proba) => ({ anomaly: proba }));
+        def gmpredictor(minst_id, filenm):
+          with open('/tmp/scanomallymodel'+str(minst_id), "rb") as input_file:
+            gm1 = pickle.load(input_file)
+            predcsv = pandas.read_csv(filenm)
+            print("pypreds", gm1.predict(predcsv))
+            return {
+               'score_samples': list(gm1.score_samples(predcsv)),
+               'predict': list(map(int,gm1.predict(predcsv)))
+              }`;
+        const predicts =
+          await python`gmpredictor(${id}, ${`/tmp/scdata${rnd}.csv`})`;
+        return rows.map((r, ix) => ({
+          log_likelihood: predicts.score_samples[ix],
+          cluster: predicts.predict[ix],
+        }));
       },
     },
   },
