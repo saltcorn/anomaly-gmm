@@ -204,14 +204,14 @@ module.exports = {
             predcsv = pandas.read_csv(filenm)
             print("pypreds", gm1.predict(predcsv))
             return {
-               'score_samples': list(gm1.score_samples(predcsv)),
-               'predict': list(map(int,gm1.predict(predcsv)))
+               'log_likelihood': list(gm1.score_samples(predcsv)),
+               'cluster': list(map(int,gm1.predict(predcsv)))
               }`;
         const predicts =
           await python`gmpredictor(${id}, ${`/tmp/scdata${rnd}.csv`})`;
         return rows.map((r, ix) => ({
-          log_likelihood: predicts.score_samples[ix],
-          cluster: predicts.predict[ix],
+          log_likelihood: predicts.log_likelihood[ix],
+          cluster: predicts.cluster[ix],
         }));
       },
     },
