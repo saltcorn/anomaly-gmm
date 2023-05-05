@@ -133,9 +133,9 @@ module.exports = {
         },
       ],
       metrics: { AIC: { lowerIsBetter: true }, BIC: { lowerIsBetter: true } },
-      prediction_output: [
+      prediction_outputs: [
         { name: "log_likelihood", type: "Float" },
-        { name: "Cluster", type: "Integer" },
+        { name: "cluster", type: "Integer" },
       ],
       train: async ({
         table,
