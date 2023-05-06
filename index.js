@@ -202,7 +202,6 @@ module.exports = {
           with open('/tmp/scanomallymodel'+str(minst_id), "rb") as input_file:
             gm1 = pickle.load(input_file)
             predcsv = pandas.read_csv(filenm)
-            print("pypreds", gm1.predict(predcsv))
             return {
                'log_likelihood': list(gm1.score_samples(predcsv)),
                'cluster': list(map(int,gm1.predict(predcsv)))
