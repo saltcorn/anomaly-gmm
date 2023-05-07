@@ -36,6 +36,7 @@ const configuration_workflow = (req) =>
             table,
             viewname: context.viewname,
             req,
+            no_fieldviews: true,
           });
 
           const type_pick = field_picker_repeat.find((f) => f.name === "type");
