@@ -167,7 +167,7 @@ module.exports = {
 
         //run notebook
         await exec(
-          `quarto render ${__dirname}/GMM.qmd --to html -o scmodelreport.html`,
+          `quarto render ${__dirname}/GMM.qmd --no-cache --execute --to html -o scmodelreport.html`,
           { cwd: "/tmp" }
         );
         //pick up
