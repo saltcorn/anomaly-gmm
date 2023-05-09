@@ -14,6 +14,7 @@ const {
   stateFieldsToQuery,
   readState,
 } = require("@saltcorn/data/plugin-helper");
+const { get_predictor, write_csv } = require("@saltcorn/data/model-helper");
 
 const pythonBridge = require("python-bridge");
 
@@ -71,69 +72,7 @@ const configuration_workflow = (req) =>
     ],
   });
 
-const write_csv = async (rows, columns, fields, filename) => {
-  return new Promise((resolve, reject) => {
-    const colWriters = [];
-    /*let idSupply = 0;
-  const getId = () => {
-    idSupply++;
-    return idSupply;
-  };*/
-    columns.forEach((column) => {
-      switch (column.type) {
-        case "FormulaValue":
-          colWriters.push({
-            header: column.header_label,
-            write: (row) => eval_expression(column.formula, row),
-          });
-          break;
-        case "Field":
-          let f = fields.find((fld) => fld.name === column.field_name);
-          if (f.type.name === "FloatArray") {
-            const dims = rows.map((r) => r[column.field_name].length);
-            const maxDims = Math.max(...dims);
-            for (let i = i < maxDims; i++; ) {
-              colWriters.push({
-                header: column.field_name + i,
-                write: (row) => row[column.field_name][i],
-              });
-            }
-          } else {
-            colWriters.push({
-              header: column.field_name,
-              write: (row) => row[column.field_name],
-            });
-          }
-          break;
-
-        default:
-          break;
-      }
-    });
-    const outstream = fs.createWriteStream(filename);
-    outstream.write(colWriters.map((cw) => cw.header).join(",") + "\n");
-    rows.forEach((row) => {
-      outstream.write(colWriters.map((cw) => cw.write(row)).join(",") + "\n");
-    });
-    outstream.end();
-    //https://stackoverflow.com/a/39880990/19839414
-    outstream.on("finish", () => {
-      resolve();
-    });
-    outstream.on("error", reject);
-  });
-};
-
-const get_predictor = (nbfile) => {
-  const ipynb = JSON.parse(fs.readFileSync(path.join(__dirname, nbfile)));
-  const cells = ipynb.cells;
-  const predCell = cells.find((cell) =>
-    cell.source.some((ln) => ln.includes("def predict("))
-  );
-  return predCell.source.join("");
-};
-
-let gmm_pred_code = get_predictor("GMM.ipynb");
+let gmm_pred_code = get_predictor(path.join(__dirname, "GMM.ipynb"));
 
 module.exports = {
   sc_plugin_api_version: 1,
