@@ -6,6 +6,7 @@ const FieldRepeat = require("@saltcorn/data/models/fieldrepeat");
 const { eval_expression } = require("@saltcorn/data/models/expression");
 const fs = require("fs");
 const fsp = fs.promises;
+const path = require("path");
 const {
   field_picker_fields,
   picked_fields_to_query,
@@ -123,6 +124,17 @@ const write_csv = async (rows, columns, fields, filename) => {
   });
 };
 
+const get_predictor = (nbfile) => {
+  const ipynb = JSON.parse(fs.readFileSync(path.join(__dirname, nbfile)));
+  const cells = ipynb.cells;
+  const predCell = cells.find((cell) =>
+    cell.source.some((ln) => ln.includes("def predict("))
+  );
+  return predCell.source.join("");
+};
+
+let gmm_pred_code = get_predictor("GMM.ipynb");
+
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: "anomaly-gmm",
@@ -191,7 +203,19 @@ module.exports = {
         hyperparameters,
         fit_object,
         rows,
-      }) => {},
+      }) => {
+        await fsp.writeFile("/tmp/scanomallymodel" + id, fit_object);
+        const table = Table.findOne({ id: table_id });
+        const rnd = Math.round(Math.random() * 10000);
+        await write_csv(rows, columns, table.fields, `/tmp/scdata${rnd}.csv`);
+        await eval("python.ex`" + gmm_pred_code + "`");
+        const predicts =
+          await python`predict('/tmp/scanomallymodel'+str(${id}), ${`/tmp/scdata${rnd}.csv`})`;
+        return rows.map((r, ix) => ({
+          log_likelihood: predicts.log_likelihood[ix],
+          cluster: predicts.cluster[ix],
+        }));
+      },
     },
     anomaly_gmm: {
       configuration_workflow,
