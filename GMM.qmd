@@ -1,0 +1,48 @@
+---
+title: "Quarto Basics"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+
+For a demonstration of a line plot on a polar axis, see @fig-polar.
+
+```{python}
+#| label: fig-polar
+#| fig-cap: "A line plot on a polar axis"
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+
+
+r = np.arange(0, 2, 0.01)
+theta = 2 * np.pi * r
+fig, ax = plt.subplots(
+  subplot_kw = {'projection': 'polar'} 
+)
+ax.plot(theta, r)
+ax.set_rticks([0.5, 1, 1.5, 2])
+ax.grid(True)
+plt.show()
+```
+
+```{python}
+import pickle
+import pandas
+import json
+from sklearn.mixture import GaussianMixture
+
+df = pandas.read_csv('/tmp/scdata.csv')
+gm = GaussianMixture(n_components=4, random_state=0).fit(df)
+with open('/tmp/scanomallymodel', 'wb') as handle:
+    pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('/tmp/scmodelmetrics.json', 'w') as fp:
+    json.dump({
+        'AIC': gm.aic(df),
+        'BIC': gm.bic(df)
+      }, fp)
+```

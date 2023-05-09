@@ -16,6 +16,10 @@ const {
 
 const pythonBridge = require("python-bridge");
 
+//https://stackoverflow.com/a/56095793/19839414
+const util = require("util");
+const exec = util.promisify(require("child_process").exec);
+
 let python = pythonBridge({
   python: "python3",
 });
@@ -123,6 +127,72 @@ module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: "anomaly-gmm",
   modeltemplates: {
+    GaussianMixtureModel: {
+      configuration_workflow,
+      hyperparameter_fields: ({ table, configuration }) => [
+        {
+          name: "clusters",
+          label: "Clusters",
+          type: "Integer",
+          attributes: { min: 0 },
+        },
+      ],
+      metrics: { AIC: { lowerIsBetter: true }, BIC: { lowerIsBetter: true } },
+      prediction_outputs: [
+        { name: "log_likelihood", type: "Float" },
+        { name: "cluster", type: "Integer" },
+      ],
+      train: async ({
+        table,
+        configuration: { columns },
+        hyperparameters,
+        state,
+      }) => {
+        //write data to CSV
+        const fields = table.fields;
+
+        readState(state, fields);
+        const { joinFields, aggregations } = picked_fields_to_query(
+          columns,
+          fields
+        );
+        const where = await stateFieldsToWhere({ fields, state, table });
+        let rows = await table.getJoinedRows({
+          where,
+          joinFields,
+          aggregations,
+        });
+
+        await write_csv(rows, columns, fields, "/tmp/scdata.csv");
+
+        //run notebook
+        await exec(
+          `quarto render ${__dirname}/GMM.qmd --to html -o scmodelreport.html`,
+          { cwd: "/tmp" }
+        );
+        //pick up
+        const fit_object = await fsp.readFile("/tmp/scanomallymodel");
+        const report = await fsp.readFile("/tmp/scmodelreport.html");
+        const metric_values = JSON.parse(
+          await fsp.readFile("/tmp/scmodelmetrics.json")
+        );
+        return {
+          fit_object,
+          report,
+          metric_values,
+        };
+      },
+      predict: async ({
+        id, //instance id
+        model: {
+          configuration: { columns },
+          table_id,
+        },
+        hyperparameters,
+        fit_object,
+        rows,
+      }) => {},
+    },
     anomaly_gmm: {
       configuration_workflow,
       hyperparameter_fields: ({ table, configuration }) => [
@@ -170,8 +240,8 @@ module.exports = {
           with open('/tmp/scanomallymodel', 'wb') as handle:
               pickle.dump(gm, handle, protocol=pickle.HIGHEST_PROTOCOL)
           return {
-            'aic': gm.aic(df),
-            'bic': gm.bic(df)
+            'AIC': gm.aic(df),
+            'BIC': gm.bic(df)
           }
         `;
         const trainres = await python`train_model()`;
@@ -179,7 +249,7 @@ module.exports = {
         return {
           fit_object: blob,
           report: "",
-          metric_values: { AIC: trainres.aic, BIC: trainres.bic },
+          metric_values: { AIC: trainres.AIC, BIC: trainres.BIC },
         };
       },
       predict: async ({
