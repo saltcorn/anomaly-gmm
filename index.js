@@ -167,7 +167,7 @@ module.exports = {
 
         //run notebook
         await exec(
-          `quarto render ${__dirname}/GMM.qmd --no-cache --execute --to html -o scmodelreport.html`,
+          `jupyter nbconvert --to html --ClearOutputPreprocessor.enabled=True --embed-images ${__dirname}/GMM.ipynb --execute --output /tmp/scmodelreport.html`,
           { cwd: "/tmp" }
         );
         //pick up
