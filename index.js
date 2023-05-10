@@ -125,6 +125,9 @@ module.exports = {
               ...process.env,
               SC_MODEL_CFG: JSON.stringify({ columns }),
               SC_MODEL_HYPERPARAMS: JSON.stringify(hyperparameters),
+              SC_MODEL_DATA_FILE: "/tmp/scdata.csv",
+              SC_MODEL_FIT_DEST: "/tmp/scanomallymodel",
+              SC_MODEL_METRICS_DEST: "/tmp/scmodelmetrics.json",
             },
           }
         );
