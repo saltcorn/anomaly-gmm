@@ -119,7 +119,14 @@ module.exports = {
         //run notebook
         await exec(
           `jupyter nbconvert --to html --ClearOutputPreprocessor.enabled=True --embed-images ${__dirname}/GMM.ipynb --execute --output /tmp/scmodelreport.html`,
-          { cwd: "/tmp" }
+          {
+            cwd: "/tmp",
+            env: {
+              ...process.env,
+              SC_MODEL_CFG: JSON.stringify({ columns }),
+              SC_MODEL_HYPERPARAMS: JSON.stringify(hyperparameters),
+            },
+          }
         );
         //pick up
         const fit_object = await fsp.readFile("/tmp/scanomallymodel");
