@@ -74,6 +74,20 @@ const configuration_workflow = (req) =>
 
 let gmm_pred_code = get_predictor(path.join(__dirname, "GMM.ipynb"));
 
+function shorten_trackback(s) {
+  if (!s) return s;
+  //https://stackoverflow.com/a/29497680/19839414
+
+  const noAnsi = (t) =>
+    t.replace(
+      /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
+      ""
+    );
+  const parts = s.split("nbclient.exceptions.CellExecutionError: ");
+  if (parts.length === 2) return noAnsi(parts[1]);
+  return noAnsi(s);
+}
+
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: "anomaly-gmm",
@@ -115,22 +129,27 @@ module.exports = {
         });
 
         await write_csv(rows, columns, fields, "/tmp/scdata.csv");
-
-        //run notebook
-        await exec(
-          `jupyter nbconvert --to html --ClearOutputPreprocessor.enabled=True --embed-images ${__dirname}/GMM.ipynb --execute --output /tmp/scmodelreport.html`,
-          {
-            cwd: "/tmp",
-            env: {
-              ...process.env,
-              SC_MODEL_CFG: JSON.stringify({ columns }),
-              SC_MODEL_HYPERPARAMS: JSON.stringify(hyperparameters),
-              SC_MODEL_DATA_FILE: "/tmp/scdata.csv",
-              SC_MODEL_FIT_DEST: "/tmp/scanomallymodel",
-              SC_MODEL_METRICS_DEST: "/tmp/scmodelmetrics.json",
-            },
-          }
-        );
+        try {
+          //run notebook
+          await exec(
+            `jupyter nbconvert --to html --ClearOutputPreprocessor.enabled=True --embed-images ${__dirname}/GMM.ipynb --execute --output /tmp/scmodelreport.html`,
+            {
+              cwd: "/tmp",
+              env: {
+                ...process.env,
+                SC_MODEL_CFG: JSON.stringify({ columns }),
+                SC_MODEL_HYPERPARAMS: JSON.stringify(hyperparameters),
+                SC_MODEL_DATA_FILE: "/tmp/scdata.csv",
+                SC_MODEL_FIT_DEST: "/tmp/scanomallymodel",
+                SC_MODEL_METRICS_DEST: "/tmp/scmodelmetrics.json",
+              },
+            }
+          );
+        } catch (e) {
+          return {
+            error: shorten_trackback(e.message),
+          };
+        }
         //pick up
         const fit_object = await fsp.readFile("/tmp/scanomallymodel");
         const report = await fsp.readFile("/tmp/scmodelreport.html");
