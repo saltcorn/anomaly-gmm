@@ -91,7 +91,7 @@ function shorten_trackback(s) {
 module.exports = {
   sc_plugin_api_version: 1,
   plugin_name: "anomaly-gmm",
-  modeltemplates: {
+  modelpatterns: {
     GaussianMixtureModel: {
       configuration_workflow,
       hyperparameter_fields: ({ table, configuration }) => [
